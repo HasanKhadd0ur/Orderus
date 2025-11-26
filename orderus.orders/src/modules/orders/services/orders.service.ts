@@ -8,6 +8,8 @@ import { CreateOrderDto } from '../dto/create-order.dto';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto';
 import { AddOrderItemDto } from '../dto/add-order-item.dto';
 import { OrderStatus } from '../entities/order-status.enum';
+import { DaprClientService } from 'src/dapr/services/dapr-client/dapr-client.service';
+import { log } from 'console';
 
 @Injectable()
 export class OrdersService {
@@ -19,11 +21,14 @@ export class OrdersService {
     private readonly orderItemRepository: Repository<OrderItem>,
 
     private readonly itemsService: ItemsService,
+
+    private daprService: DaprClientService,
   ) {}
 
   // Create order with items
   async createOrder(dto: CreateOrderDto): Promise<Order> {
     const order = this.orderRepository.create({
+      userId: dto.userId,
       customerName: dto.customerName,
       status: OrderStatus.PENDING,
     });
@@ -40,7 +45,16 @@ export class OrdersService {
     }
 
     order.items = orderItems;
-    return this.orderRepository.save(order);
+
+    const saved = await this.orderRepository.save(order);
+
+    await this.daprService.publishOrderCreated({
+      id: saved.id,
+      customerName: saved.customerName,
+      status: saved.status,
+    });
+
+    return saved;
   }
 
   // Get all orders

@@ -5,6 +5,8 @@ import { BaseEntity } from 'src/common/entities/base.entity';
 
 @Entity()
 export class Order extends BaseEntity {
+  @Column()
+  userId: string;
 
   @Column()
   customerName: string;
