@@ -1,0 +1,101 @@
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: strong_root_password
+      MYSQL_DATABASE: orderus_orders_db
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: app_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    command: --default-authentication-plugin=mysql_native_password
+    networks:
+      - mynet
+
+  mongodb:
+    image: mongo:6.0
+    container_name: mongo-db
+    restart: always
+    environment:
+      MONGO_INITDB_DATABASE: questionset_v3
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - mynet
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: php-myadmin
+    restart: always
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      PMA_USER: root
+      PMA_PASSWORD: strong_root_password
+    ports:
+      - "8020:80"  
+    depends_on:
+      - mysql
+    networks:
+      - mynet
+
+  redis:
+    image: redis:7
+    container_name: redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - mynet
+
+  orders:
+    build: ./orderus.orders
+    container_name: orders-service
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./orderus.orders/.env.dev
+    environment:
+      DB_HOST: mysql
+      NODE_ENV: development
+    depends_on:
+      - mysql
+      - redis
+    networks:
+      - mynet
+
+  orders-dapr:
+    image: "daprio/daprd:latest"
+    container_name: orders-dapr
+    command: [
+      "./daprd",
+      "-app-id", "orders-service",
+      "-app-port", "3000",
+      "-dapr-http-port", "3500",
+      "-dapr-grpc-port", "50001",
+      "-resources-path", "/components"
+    ]
+    volumes:
+      - ./orderus.orders/src/dapr/components:/components
+    depends_on:
+      - orders
+    networks:
+      - mynet
+    ports:
+      - "3500:3500"
+      - "50001:50001"
+
+volumes:
+  mysql-data:
+  mongodb_data:
+
+networks:
+  mynet:
+    driver: bridge
