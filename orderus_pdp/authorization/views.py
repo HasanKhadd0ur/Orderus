@@ -1,15 +1,11 @@
-from django.shortcuts import render
-
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 import json
+import requests
+import os
 
-# Dummy RBAC rules
-USER_ROLES = {
-    1: 'admin',
-    2: 'user',
-    3: 'guest'
-}
+DAPR_HTTP_PORT = os.getenv("DAPR_HTTP_PORT", 3502)
+STATE_STORE = "pdp-statestore"
 
 ACTION_PERMISSIONS = {
     'create_order': ['admin', 'user'],
@@ -27,10 +23,18 @@ def authorize(request):
         user_id = body.get('userId')
         action = body.get('action')
 
-        role = USER_ROLES.get(user_id)
-        if not role:
-            return JsonResponse({'decision': 'deny', 'reason': 'user not found'})
+        state_url = f"http://localhost:{DAPR_HTTP_PORT}/v1.0/state/{STATE_STORE}/user:{user_id}"
+        resp = requests.get(state_url)
 
+        if resp.status_code != 200 or not resp.json():
+            return JsonResponse({'decision': 'deny', 'reason': 'user not found in state store'})
+
+        role_data = resp.json()[0].get("value") if isinstance(resp.json(), list) else resp.json()
+        role = role_data.get("role")
+        if not role:
+            return JsonResponse({'decision': 'deny', 'reason': 'role not found'})
+
+        # Check permission
         allowed_roles = ACTION_PERMISSIONS.get(action, [])
         if role in allowed_roles:
             return JsonResponse({'decision': 'allow'})
