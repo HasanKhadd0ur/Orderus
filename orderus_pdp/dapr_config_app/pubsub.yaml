@@ -1,0 +1,13 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: order-pubsub           # The name referenced by other services
+  namespace: default
+spec:
+  type: pubsub.redis           # Redis pub/sub
+  version: v1
+  metadata:
+    - name: redisHost
+      value: "localhost:6379"   # Redis host
+    - name: redisPassword
+      value: ""                 # Password if needed
