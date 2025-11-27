@@ -17,12 +17,4 @@ export class DaprClientService {
     });
   }
 
-  async publishOrderCreated(order: any) {
-    try {
-      await this.client.pubsub.publish('order-pubsub', 'orders.created', order);
-      this.logger.log(`OrderCreated event published`,'order-pubsub', 'orders.created', order);
-    } catch (err) {
-      this.logger.error('Failed to publish event', err);
-    }
-  }
 }

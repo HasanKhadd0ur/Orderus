@@ -22,7 +22,7 @@ services:
     container_name: mongo-db
     restart: always
     environment:
-      MONGO_INITDB_DATABASE: questionset_v3
+      MONGO_INITDB_DATABASE: calendar
     ports:
       - "27017:27017"
     volumes:
@@ -58,18 +58,23 @@ services:
   orders:
     build: ./orderus.orders
     container_name: orders-service
-    ports:
-      - "3000:3000"
     env_file:
       - ./orderus.orders/.env.dev
     environment:
+      SERVICE_APP_PORT: 3000
       DB_HOST: mysql
-      NODE_ENV: development
+    ports:
+      - "3000:3000"
     depends_on:
       - mysql
       - redis
     networks:
       - mynet
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 5s
+      retries: 5
+
 
   orders-dapr:
     image: "daprio/daprd:latest"
@@ -80,7 +85,8 @@ services:
       "-app-port", "3000",
       "-dapr-http-port", "3500",
       "-dapr-grpc-port", "50001",
-      "-resources-path", "/components"
+      "-resources-path", "/components",
+      "--log-level","debug"
     ]
     volumes:
       - ./orderus.orders/src/dapr/components:/components
@@ -91,6 +97,42 @@ services:
     ports:
       - "3500:3500"
       - "50001:50001"
+
+  notifications:
+    build: ./orderus.notifications
+    container_name: orderus-notifications
+    env_file:
+      - ./orderus.notifications/.env.dev
+    environment:
+      SERVICE_APP_PORT: 3000
+    ports:
+      - "3001:3000"   
+    depends_on:
+      - redis
+      - orders
+    networks:
+      - mynet
+
+  notifications-dapr:
+    image: "daprio/daprd:latest"
+    container_name: notifications-dapr
+    command: [
+      "./daprd",
+      "-app-id", "orderus-notifications",
+      "-app-port", "3001",
+      "-dapr-http-port", "3501",
+      "-dapr-grpc-port", "50002",
+      "-resources-path", "/components"
+    ]
+    volumes:
+      - ./orderus.notifications/src/dapr/components:/components
+    depends_on:
+      - notifications
+    networks:
+      - mynet
+    ports:
+      - "3501:3501"
+      - "50002:50002"
 
 volumes:
   mysql-data:

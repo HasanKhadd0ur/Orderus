@@ -50,6 +50,7 @@ export class OrdersService {
 
     await this.daprService.publishOrderCreated({
       id: saved.id,
+      userId: saved.userId,
       customerName: saved.customerName,
       status: saved.status,
     });
