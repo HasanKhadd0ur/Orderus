@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Order } from '../entities/order.entity';
@@ -13,6 +13,9 @@ import { log } from 'console';
 
 @Injectable()
 export class OrdersService {
+  
+  private readonly logger = new Logger('OrdersService');
+  
   constructor(
     @InjectRepository(Order)
     private readonly orderRepository: Repository<Order>,
@@ -26,37 +29,61 @@ export class OrdersService {
   ) {}
 
   // Create order with items
+ 
   async createOrder(dto: CreateOrderDto): Promise<Order> {
-    const order = this.orderRepository.create({
-      userId: dto.userId,
-      customerName: dto.customerName,
-      status: OrderStatus.PENDING,
+  this.logger.log(`Creating order for user ${dto.userId}`);
+  this.logger.debug(`Payload received: ${JSON.stringify(dto)}`);
+
+  const order = this.orderRepository.create({
+    userId: dto.userId,
+    customerName: dto.customerName,
+    status: OrderStatus.PENDING,
+  });
+
+  const orderItems: OrderItem[] = [];
+
+  // Load items
+  for (const i of dto.items) {
+    this.logger.log(`Fetching item with ID ${i.itemId}`);
+    const item = await this.itemsService.getItemById(i.itemId);
+
+    this.logger.log(
+      `Adding item ${item.id} (qty: ${i.quantity}) to order for user ${dto.userId}`
+    );
+
+    const orderItem = this.orderItemRepository.create({
+      item,
+      quantity: i.quantity,
+      order,
     });
 
-    const orderItems: OrderItem[] = [];
-    for (const i of dto.items) {
-      const item = await this.itemsService.getItemById(i.itemId);
-      const orderItem = this.orderItemRepository.create({
-        item,
-        quantity: i.quantity,
-        order,
-      });
-      orderItems.push(orderItem);
-    }
-
-    order.items = orderItems;
-
-    const saved = await this.orderRepository.save(order);
-
-    await this.daprService.publishOrderCreated({
-      id: saved.id,
-      userId: saved.userId,
-      customerName: saved.customerName,
-      status: saved.status,
-    });
-
-    return saved;
+    orderItems.push(orderItem);
   }
+
+  order.items = orderItems;
+
+  // Saving order
+  this.logger.log(`Saving order for user ${dto.userId}`);
+  const saved = await this.orderRepository.save(order);
+  this.logger.log(`Order saved with ID ${saved.id}`);
+
+  // Publish event
+  const eventPayload = {
+    id: saved.id,
+    userId: saved.userId,
+    customerName: saved.customerName,
+    status: saved.status,
+  };
+
+  this.logger.log(`Publishing OrderCreated event for order ID ${saved.id}`);
+  this.logger.debug(`Event payload: ${JSON.stringify(eventPayload)}`);
+
+  await this.daprService.publishOrderCreated(eventPayload);
+
+  this.logger.log(`OrderCreated event published for order ID ${saved.id}`);
+
+  return saved;
+}
 
   // Get all orders
   async getAllOrders(): Promise<Order[]> {
